@@ -35,7 +35,7 @@ def read_bq_table(project_id, dataset_name, table_name, spark_session):
 
     bq_table = f"{project_id}.{dataset_name}.{table_name}"
 
-    print(f"🔍 Reading BigQuery table: {bq_table}")
+    print(f"\n🔍 Reading BigQuery table: {bq_table}")
 
     try:
         client = bigquery.Client(project=project_id)
@@ -52,12 +52,21 @@ def read_bq_table(project_id, dataset_name, table_name, spark_session):
         except Exception:
             raise ValueError(f"❌ Table '{bq_table}' not found in BigQuery.")
 
-        # Query data only from today's ingestion date
-        query = f"""
-        SELECT *
-        FROM `{bq_table}`
-        WHERE DATE(_ingestion_timestamp) = '{today_str}'
-        """
+        if 'weather' in table_name:
+            query = f"""
+                SELECT *
+                FROM `{bq_table}`
+                WHERE DATE(_ingestion_timestamp) = '{today_str}'
+            """
+        elif 'cities' in table_name:
+            query = f"""
+                SELECT *
+                FROM `{bq_table}`
+                WHERE DATE(_ingestion_timestamp) = (
+                    SELECT MAX(DATE(_ingestion_timestamp))
+                    FROM `{bq_table}`
+                )
+            """
 
         print(f"🕒 Running query for {today_str} ...")
 
@@ -80,9 +89,9 @@ def read_bq_table(project_id, dataset_name, table_name, spark_session):
 def write_bq_table(df_spark, project_id, dataset_name, table_name, if_exists="append"):
     from google.cloud import bigquery
     import pandas as pd
+    import gc
 
-    # Convert Spark → Pandas
-    print("🔄 Converting Spark DataFrame to Pandas...")
+    print("\n🔄 Converting Spark DataFrame to Pandas...")
     df_pandas = df_spark.toPandas()
 
     client = bigquery.Client(project=project_id)
@@ -98,16 +107,25 @@ def write_bq_table(df_spark, project_id, dataset_name, table_name, if_exists="ap
 
     print(f"📤 Uploading data to BigQuery table: {table_id} ...")
 
-    # Upload DataFrame
-    load_job = client.load_table_from_dataframe(df_pandas, table_id, job_config=job_config)
-    load_job.result()  # Wait for completion
+    try:
+        load_job = client.load_table_from_dataframe(df_pandas, table_id, job_config=job_config)
+        load_job.result()  # Wait for completion
+        print(f"✅ BigQuery table '{table_id}' successfully written!")
+    except Exception as e:
+        print(f"❌ Error uploading to BigQuery: {e}")
+        raise
+    finally:
+        # 🧹 Memory cleanup
+        print("🧹 Releasing memory from DataFrames...")
+        del df_pandas
+        del df_spark
+        gc.collect()
+        print("✅ Memory successfully released!")
 
-    print(f"✅ BigQuery table '{table_id}' successfully written!")
     return table_id
 
-
 def remove_null_values(df):
-    print('Removing null values from each column:')
+    print('\nRemoving null values from each column:')
     
     for col, dtype in df.dtypes:
         if dtype not in ['string', 'date', 'timestamp']:
@@ -130,13 +148,13 @@ def remove_null_values(df):
     return df
 
 def check_unique_values(df):
-    print('Checking unique values from each column:')
+    print('\nChecking unique values from each column:')
     for col in df.columns:
         print(f'Unique value count: {df.select(F.col(col)).distinct().count()}')
         df.select(col).distinct().show(truncate=False)
 
 def basic_data_profiling(df):
-    print('Basic data Profiling:')
+    print('\nBasic data Profiling:')
     for col, dtype in df.dtypes:
         print(f"\nColumn: {col}")
         df.select(
@@ -147,7 +165,7 @@ def basic_data_profiling(df):
         ).show(truncate=False)
 
 def remove_whitespace(df):
-    print('Removing whitespace in values from each column:')
+    print('\nRemoving whitespace in values from each column:')
 
     string_columns = [col for col, dtype in df.dtypes if dtype == 'string']
     for col in string_columns:
@@ -164,17 +182,19 @@ def remove_whitespace(df):
     return df
 
 def drop_duplicates(df):
-    print('Dropping duplicate lines:')
+    print('\nDropping duplicate lines:')
 
-    dropped_lines = df.count() - df_cptec_w.dropDuplicates().count()
+    initial_count = df.count()
     df = df.dropDuplicates()
+    final_count = df.count()
 
-    print(f'{dropped_lines} dropped lines.')
+    dropped_lines = max(initial_count - final_count, 0)
 
+    print(f"✅ {dropped_lines} duplicate lines dropped.")
     return df
 
 def remove_columns(df, columns_to_remove: list):
-    print('Removing unnecessary columns:')
+    print('\nRemoving unnecessary columns:')
 
     for col in columns_to_remove:
         df = df.drop(col)
@@ -183,8 +203,7 @@ def remove_columns(df, columns_to_remove: list):
     return df
 
 # %%
-print('📂 Working with the "bronze_cptec_weather" table:\n')
-
+print('\n📂 Working with the "bronze_cptec_weather" table:')
 df_cptec_w = read_bq_table(
     project_id=project_id,
     dataset_name=dataset_name,
@@ -193,7 +212,7 @@ df_cptec_w = read_bq_table(
 )
 
 # %%
-print('Original Schema:')
+print('\nOriginal Schema:')
 df_cptec_w.printSchema()
 
 df_cptec_w = df_cptec_w.withColumn(
@@ -243,8 +262,7 @@ print('\n📁 Finished working with the "bronze_cptec_weather" table.')
 
 
 # %%
-print('📂 Working with the "bronze_cptec_cities" table:')
-print('\nReading data...')
+print('\n📂 Working with the "bronze_cptec_cities" table:')
 df_cptec_c = read_bq_table(
     project_id=project_id,
     dataset_name=dataset_name,
@@ -253,14 +271,14 @@ df_cptec_c = read_bq_table(
 )
 
 # %%
-print('Original Schema:')
+print('\nOriginal Schema:')
 df_cptec_c.printSchema()
 
 # %%        
 df_cptec_c = remove_null_values(df_cptec_c)
     
 # %%
-checking_unique_values(df_cptec_c)
+check_unique_values(df_cptec_c)
 
 # %%
 basic_data_profiling(df_cptec_c)
@@ -272,7 +290,7 @@ df_cptec_c = remove_whitespace(df_cptec_c)
 df_cptec_c = drop_duplicates(df_cptec_c)
 
 # %%
-print('Checking consistency between the columns "nome" and "id":')
+print('\nChecking consistency between the columns "nome" and "id":')
 
 inconsistencies = (
     df_cptec_c
@@ -288,7 +306,7 @@ else:
     print("✅ All names are consistently associated with a single ID.")
 
 # %%
-print('Adding metadata...')
+print('\nAdding metadata...')
 df_cptec_c = df_cptec_c.withColumn("_processing_date", F.current_date())
 
 # %%
@@ -299,4 +317,75 @@ write_bq_table(
     table_name='silver_cptec_cities'
 )
 
-print('\n📁 Finished working with the "bronze_cptec_weather" table.')
+print('\n📁 Finished working with the "bronze_cptec_cities" table.')
+
+
+# %%
+print('\n📂 Working with the "bronze_ibge_cities" table:')
+df_ibge_c = read_bq_table(
+    project_id=project_id,
+    dataset_name=dataset_name,
+    table_name='bronze_ibge_cities',
+    spark_session=spark
+)
+
+# %%
+print('\nOriginal Schema:')
+df_ibge_c.printSchema()
+
+new_cols = [col.replace('-', '_') for col in df_ibge_c.columns]
+
+for old_name, new_name in zip(df_ibge_c.columns, new_cols):
+    if old_name != new_name:
+        df_ibge_c = df_ibge_c.withColumnRenamed(old_name, new_name)
+
+print('Processed Schema:')
+df_ibge_c.printSchema()
+
+# %%
+print('\nChecking consistency between the columns "nome" and "id":')
+
+inconsistencies = (
+    df_ibge_c
+    .groupBy("nome")
+    .agg(F.countDistinct("id").alias("unique_ids"))
+    .where(F.col("unique_ids") != 1)
+)
+
+if inconsistencies.count() > 0:
+    print(f"⚠️ Found {inconsistencies.count()} inconsistent names with more than one ID.\n")
+    inconsistencies.show(truncate=False)
+else:
+    print("✅ All names are consistently associated with a single ID.")
+
+# %%        
+df_ibge_c = remove_null_values(df_ibge_c)
+    
+# %%
+check_unique_values(df_ibge_c)
+
+# %%
+basic_data_profiling(df_ibge_c)
+
+# %%
+df_ibge_c = remove_whitespace(df_ibge_c)
+
+# %%
+df_ibge_c = drop_duplicates(df_ibge_c)
+
+# %%
+# df_ibge_c = remove_columns(df_ibge_c, [])
+
+# %%
+print('\nAdding metadata...')
+df_ibge_c = df_ibge_c.withColumn("_processing_date", F.current_date())
+
+# %%
+write_bq_table(
+    df_spark=df_ibge_c,
+    project_id=project_id,
+    dataset_name=dataset_name,
+    table_name='silver_ibge_cities'
+)
+
+print('\n📁 Finished working with the "bronze_ibge_cities" table.')
