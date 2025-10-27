@@ -2,6 +2,7 @@
 # Defining variables and importing functions...
 from utils.bigquery import write_bq_table, create_dataset_if_not_exists, upload_to_bq_once_a_year
 from utils.data_ingestion import *
+from datetime import datetime
 
 import asyncio
 from dotenv import load_dotenv
@@ -13,6 +14,8 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CRE
 project_id = "focus-storm-475900-p6"
 dataset_name = "weather_lakehouse"
 dataset_id = f"{project_id}.{dataset_name}"
+
+today_str = datetime.now().strftime("%Y-%m-%d")
 
 # %%
 # Getting city base data
@@ -49,13 +52,13 @@ df_ibge_ri.columns = ['regiao_imediata_' + col.replace('.', '_') for col in df_i
 df_ibge_c = df_ibge_c[['id', 'nome']]
 df_ibge_c = pd.concat([df_ibge_c, df_ibge_mr, df_ibge_ri], axis=1)
 df_ibge_c['_source'] = 'IBGE API'
-df_ibge_c['_ingestion_timestamp'] = pd.Timestamp.now()
+df_ibge_c['_ingestion_date'] = today_str
 
 
 # CPTEC City Dataset
 df_cptec_c = pd.DataFrame(city_data)
 df_cptec_c['_source'] = 'CPTEC API'
-df_cptec_c['_ingestion_timestamp'] = pd.Timestamp.now()
+df_cptec_c['_ingestion_date'] = today_str
 
 
 # CPTEC City Weather Dataset
@@ -70,7 +73,7 @@ df_cptec_w = pd.concat(
 )
 
 df_cptec_w['_source'] = 'CPTEC API'
-df_cptec_w['_ingestion_timestamp'] = pd.Timestamp.utcnow()
+df_cptec_w['_ingestion_date'] = today_str
 
 # %%
 # Saving data into BigQuery

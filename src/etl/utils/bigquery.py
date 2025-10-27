@@ -18,12 +18,12 @@ def create_dataset_if_not_exists(dataset_id, project_id=None, location="US"):
 
 def upload_to_bq_once_a_year(df, dataset_id, table_name, project_id):
     table_id = f"{dataset_id}.{table_name}"
-    current_year = pd.Timestamp.utcnow().year
+    current_year = datetime.now().strftime("%Y")
     client = bigquery.Client(project=project_id)
 
     try:
         table = client.get_table(table_id)
-        query = f"SELECT MAX(_ingestion_timestamp) AS last_date FROM `{table_id}`"
+        query = f"SELECT MAX(_ingestion_date) AS last_date FROM `{table_id}`"
         result = client.query(query).to_dataframe()
         last_date = result['last_date'].iloc[0]
 
@@ -72,14 +72,14 @@ def read_bq_table(project_id, dataset_name, table_name, spark_session):
             query = f"""
                 SELECT *
                 FROM `{bq_table}`
-                WHERE DATE(_ingestion_timestamp) = '{today_str}'
+                WHERE DATE(_ingestion_date) = '{today_str}'
             """
         elif 'cities' in table_name:
             query = f"""
                 SELECT *
                 FROM `{bq_table}`
-                WHERE DATE(_ingestion_timestamp) = (
-                    SELECT MAX(DATE(_ingestion_timestamp))
+                WHERE DATE(_ingestion_date) = (
+                    SELECT MAX(DATE(_ingestion_date))
                     FROM `{bq_table}`
                 )
             """
@@ -103,8 +103,9 @@ def read_bq_table(project_id, dataset_name, table_name, spark_session):
         raise
 
 def write_bq_table(df, project_id, dataset_name, table_name, if_exists="append"):
-    print("\n🔄 Converting DataFrame to Pandas...")
+    
     if type(df) != pd.DataFrame:
+        print("\n🔄 Converting DataFrame to Pandas...")
         df_pandas = df.toPandas()
     else:
         df_pandas = df
