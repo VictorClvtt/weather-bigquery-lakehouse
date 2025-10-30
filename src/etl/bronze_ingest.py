@@ -5,10 +5,6 @@ from utils.data_ingestion import *
 from datetime import datetime
 
 import asyncio
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
 
 bucket_name = 'weather-forecast-data-lake'
 path = 'bronze/'

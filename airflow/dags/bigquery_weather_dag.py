@@ -30,6 +30,16 @@ def bigquery_weather_dag():
         task_id="bronze_to_silver",
         conn_id="my_spark_conn",
         application="include/src/etl/bronze_to_silver.py",
+        packages="org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.671",
+        conf={
+            "spark.hadoop.fs.s3a.endpoint": "http://minio:9000",
+            "spark.hadoop.fs.s3a.access.key": "admin",
+            "spark.hadoop.fs.s3a.secret.key": "admin123",
+            "spark.hadoop.fs.s3a.path.style.access": "true",
+            "spark.hadoop.fs.s3a.connection.ssl.enabled": "false",
+            "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+        },
         verbose=True,
     )
 
@@ -37,6 +47,16 @@ def bigquery_weather_dag():
         task_id="silver_to_gold",
         conn_id="my_spark_conn",
         application="include/src/etl/silver_to_gold.py",
+        packages="org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.671",
+        conf={
+            "spark.hadoop.fs.s3a.endpoint": "http://minio:9000",
+            "spark.hadoop.fs.s3a.access.key": "admin",
+            "spark.hadoop.fs.s3a.secret.key": "admin123",
+            "spark.hadoop.fs.s3a.path.style.access": "true",
+            "spark.hadoop.fs.s3a.connection.ssl.enabled": "false",
+            "spark.hadoop.fs.s3a.impl": "org.apache.hadoop.fs.s3a.S3AFileSystem",
+            "spark.hadoop.fs.s3a.aws.credentials.provider": "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider"
+        },
         verbose=True,
     )
 

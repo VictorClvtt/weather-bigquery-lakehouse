@@ -13,6 +13,6 @@ ENV JAVA_HOME /usr/lib/jvm/java-17-openjdk-amd64
 RUN export JAVA_HOME
 
 # Install PySpark
-RUN pip install --no-cache-dir pyspark==4.0.0
+RUN pip install --no-cache-dir pyspark==3.5.1
 
 USER astro

@@ -4,7 +4,7 @@ version: '3.1'
 services:
 
   spark-master:
-    image: bitnamilegacy/spark:4.0.0
+    image: bitnamilegacy/spark:3.5.1
     hostname: spark-master
     environment:
       - SPARK_MODE=master
@@ -19,16 +19,13 @@ services:
     volumes:
       - spark-data:/bitnami
       - ./include:/usr/local/airflow/include
-      - ./include/src:/usr/local/airflow/include/src
-      - ./include/src/etl:/usr/local/airflow/include/src/etl
-      - ./include/src/etl/utils:/usr/local/airflow/include/src/etl/utils
       - ./apps:/opt/spark-apps
       - ./data:/opt/spark-data
     networks:
       - airflow
 
   spark-worker:
-    image: bitnamilegacy/spark:4.0.0
+    image: bitnamilegacy/spark:3.5.1
     environment:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
@@ -40,9 +37,6 @@ services:
       - SPARK_SSL_ENABLED=no
     volumes:
       - ./include:/usr/local/airflow/include
-      - ./include/src:/usr/local/airflow/include/src
-      - ./include/src/etl:/usr/local/airflow/include/src/etl
-      - ./include/src/etl/utils:/usr/local/airflow/include/src/etl/utils
       - spark-data:/bitnami
       - ./apps:/opt/spark-apps
       - ./data:/opt/spark-data
@@ -70,3 +64,7 @@ services:
 volumes:
   spark-data:
   minio-data:
+
+networks:
+  airflow:
+    driver: bridge

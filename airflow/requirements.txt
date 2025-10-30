@@ -6,3 +6,4 @@ pandas
 python-dotenv
 google-cloud-bigquery
 aiohttp
+boto3
