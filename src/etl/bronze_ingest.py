@@ -1,6 +1,6 @@
 # %%
 # Defining variables and importing functions...
-from utils.bigquery import write_bq_table, create_dataset_if_not_exists, upload_to_bq_once_a_year
+from utils.bucket import write_to_minio, write_to_minio_once_a_year, create_bucket_if_not_exists
 from utils.data_ingestion import *
 from datetime import datetime
 
@@ -10,10 +10,8 @@ import os
 
 load_dotenv()
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-project_id = "focus-storm-475900-p6"
-dataset_name = "weather_lakehouse"
-dataset_id = f"{project_id}.{dataset_name}"
+bucket_name = 'weather-forecast-data-lake'
+path = 'bronze/'
 
 today_str = datetime.now().strftime("%Y-%m-%d")
 
@@ -76,19 +74,31 @@ df_cptec_w['_source'] = 'CPTEC API'
 df_cptec_w['_ingestion_date'] = today_str
 
 # %%
-# Saving data into BigQuery
-create_dataset_if_not_exists(dataset_id, project_id)
+# Saving data into the Data Lake
+create_bucket_if_not_exists(
+    bucket_name=bucket_name,
+)
 
 # IBGE City Dataset
-upload_to_bq_once_a_year(df_ibge_c, dataset_id, "bronze_ibge_cities", project_id)
+write_to_minio_once_a_year(
+    df=df_ibge_c,
+    bucket=bucket_name,
+    path=f'{path}ibge/city/{today_str}.csv',
+    format='csv'
+)
 
 # CPTEC City Dataset
-upload_to_bq_once_a_year(df_cptec_c, dataset_id, "bronze_cptec_cities", project_id)
+write_to_minio_once_a_year(
+    df=df_cptec_c,
+    bucket=bucket_name,
+    path=f'{path}cptec/city/{today_str}.csv',
+    format='csv'
+)
 
 # CPTEC City Weather Dataset
-write_bq_table(
-    df_cptec_w,
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name="bronze_cptec_weather"
+write_to_minio(
+    df=df_cptec_w,
+    bucket=bucket_name,
+    path=f'{path}cptec/weather/{today_str}.csv',
+    format='csv'
 )

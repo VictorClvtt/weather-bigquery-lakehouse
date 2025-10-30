@@ -2,6 +2,7 @@
 print('Importing libraries/functions and defining variables...')
 
 from utils.bigquery import *
+from utils.bucket import read_from_minio
 
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
@@ -16,31 +17,43 @@ project_id = "focus-storm-475900-p6"
 dataset_name = "weather_lakehouse"
 dataset_id = f"{project_id}.{dataset_name}"
 
+bucket_name = 'weather-forecast-data-lake'
+input_path = 'silver/'
+
+today_str = datetime.now().strftime("%Y-%m-%d")
+
 # %%
 print('Initializing Spark session...')
 
-spark = SparkSession.builder.appName("Silver to Gold").getOrCreate()
+spark = (
+    SparkSession.builder.appName("Silver to Gold")
+    .config(
+        "spark.jars.packages",
+        "org.apache.hadoop:hadoop-aws:3.4.1,com.amazonaws:aws-java-sdk-bundle:1.12.671"
+    )
+    .getOrCreate()
+)
 
 # %%
 print('Reading data:')
 
-silver_ibge_cities = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_ibge_cities',
-    spark_session=spark
+silver_ibge_cities = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}ibge/city/{today_str}',
+    format='parquet'
 )
-silver_cptec_cities = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_cptec_cities',
-    spark_session=spark
+silver_cptec_cities = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}cptec/city/{today_str}',
+    format='parquet'
 )
-silver_cptec_weather = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_cptec_weather',
-    spark_session=spark
+silver_cptec_weather = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}cptec/weather/{today_str}',
+    format='parquet'
 )
 # %%
 print('🥈 Silver tables schemas:\n')
@@ -158,6 +171,11 @@ fact_weather.printSchema()
 
 # %%
 print('Writing denormalized tables to BigQuery:')
+
+create_dataset_if_not_exists(
+    dataset_id=dataset_id,
+    project_id=project_id,
+)
 
 write_bq_table(
     df=dim_city,

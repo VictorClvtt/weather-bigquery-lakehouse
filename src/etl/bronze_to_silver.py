@@ -3,36 +3,39 @@ print('Initializing Spark session...')
 from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 
-spark = SparkSession.builder.appName("Bronze to Silver").getOrCreate()
-
-# %%
-print('Importing environment variables...')
-from dotenv import load_dotenv
-import os
-
-load_dotenv()
-
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+spark = (
+    SparkSession.builder.appName("Bronze to Silver")
+    .config(
+        "spark.jars.packages",
+        "org.apache.hadoop:hadoop-aws:3.4.1,com.amazonaws:aws-java-sdk-bundle:1.12.671"
+    )
+    .getOrCreate()
+)
 
 # %%
 print('Defining variables and importing functions...')
+from datetime import datetime
 
-project_id = 'focus-storm-475900-p6'
-dataset_name = 'weather_lakehouse'
+bucket_name = 'weather-forecast-data-lake'
+input_path = 'bronze/'
+output_path = 'silver/'
 
-from utils.bigquery import *
+today_str = datetime.now().strftime("%Y-%m-%d")
+
+from utils.bucket import *
 from utils.data_cleaning import *
 from utils.data_profiling import *
 
 # %%
 print('\n📂 Working with the "bronze_cptec_weather" table:')
-df_cptec_w = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='bronze_cptec_weather',
-    spark_session=spark
+df_cptec_w = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}cptec/weather/{today_str}.csv',
+    format='csv'
 )
 
+df_cptec_w.show()
 # %%
 print('\nOriginal Schema:')
 df_cptec_w.printSchema()
@@ -73,11 +76,11 @@ df_cptec_w = df_cptec_w.withColumn("_processing_date", F.current_date())
 
 
 # %%
-write_bq_table(
+write_to_minio(
     df=df_cptec_w,
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_cptec_weather'
+    bucket=bucket_name,
+    path=f'{output_path}cptec/weather/{today_str}',
+    format='parquet'
 )
 
 print('\n📁 Finished working with the "bronze_cptec_weather" table.')
@@ -85,11 +88,11 @@ print('\n📁 Finished working with the "bronze_cptec_weather" table.')
 
 # %%
 print('\n📂 Working with the "bronze_cptec_cities" table:')
-df_cptec_c = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='bronze_cptec_cities',
-    spark_session=spark
+df_cptec_c = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}cptec/city/{today_str}.csv',
+    format='csv'
 )
 
 # %%
@@ -132,11 +135,11 @@ print('\nAdding metadata...')
 df_cptec_c = df_cptec_c.withColumn("_processing_date", F.current_date())
 
 # %%
-write_bq_table(
+write_to_minio(
     df=df_cptec_c,
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_cptec_cities'
+    bucket=bucket_name,
+    path=f'{output_path}cptec/city/{today_str}',
+    format='parquet'
 )
 
 print('\n📁 Finished working with the "bronze_cptec_cities" table.')
@@ -144,11 +147,11 @@ print('\n📁 Finished working with the "bronze_cptec_cities" table.')
 
 # %%
 print('\n📂 Working with the "bronze_ibge_cities" table:')
-df_ibge_c = read_bq_table(
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='bronze_ibge_cities',
-    spark_session=spark
+df_ibge_c = read_from_minio(
+    spark=spark,
+    bucket=bucket_name,
+    path=f'{input_path}ibge/city/{today_str}.csv',
+    format='csv'
 )
 
 # %%
@@ -196,18 +199,15 @@ df_ibge_c = remove_whitespace(df_ibge_c)
 df_ibge_c = drop_duplicates(df_ibge_c)
 
 # %%
-# df_ibge_c = remove_columns(df_ibge_c, [])
-
-# %%
 print('\nAdding metadata...')
 df_ibge_c = df_ibge_c.withColumn("_processing_date", F.current_date())
 
 # %%
-write_bq_table(
+write_to_minio(
     df=df_ibge_c,
-    project_id=project_id,
-    dataset_name=dataset_name,
-    table_name='silver_ibge_cities'
+    bucket=bucket_name,
+    path=f'{output_path}ibge/city/{today_str}',
+    format='parquet'
 )
 
 print('\n📁 Finished working with the "bronze_ibge_cities" table.')
