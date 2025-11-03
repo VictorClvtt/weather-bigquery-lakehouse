@@ -68,19 +68,16 @@ print('📃 "silver_cptec_weather" table schema:')
 silver_cptec_weather.printSchema()
 
 # %%
-print('🥇 Gold denormalized schemas:')
+print('🥇 Gold denormalized schemas:\n')
 
+##################
+# CITY DIMENSION #
+##################
 print('📃 "dim_city" table schema:')
 dim_city = silver_ibge_cities.select(
     F.col('id').alias('id_ibge'),
     F.col('nome').alias('nome_ibge'),
-    F.col('microrregiao_id'),
-    F.col('microrregiao_nome'),
-    F.col('regiao_imediata_id'),
-    F.col('regiao_imediata_nome'),
-    F.col('regiao_imediata_regiao_intermediaria_id').alias('id_regiao_intermediaria'),
-    F.col('regiao_imediata_regiao_intermediaria_nome').alias('nome_regiao_intermediaria'),
-    F.col('microrregiao_mesorregiao_UF_id').alias('uf_id'),
+    F.col('microrregiao_mesorregiao_UF_regiao_nome').alias('nome_regiao'),
     F.col('microrregiao_mesorregiao_UF_sigla').alias('uf_sigla'),
     F.col('microrregiao_mesorregiao_UF_nome').alias('uf_nome')
 )
@@ -93,82 +90,110 @@ dim_city = dim_city.join(
     F.col('id_ibge'),
     F.col('id').alias('id_cptec'),
     F.coalesce(F.col('nome_ibge'), F.col('nome')).alias('nome'),
-    'estado',
+    'nome_regiao',
     'uf_sigla',
     'uf_nome',
-    'microrregiao_id',
-    'microrregiao_nome',
-    'regiao_imediata_id',
-    'regiao_imediata_nome',
-    'id_regiao_intermediaria',
-    'nome_regiao_intermediaria'
 )
 
+dim_city = dim_city.withColumn(
+    "id_city",
+    F.sha2(F.concat_ws(":", F.col("id_ibge"), F.col("id_cptec")), 256)
+)
 dim_city.printSchema()
 
+#########################
+# UPDATE DATE DIMENSION #
+#########################
+print('📃 "dim_update_date" table schema:')
+dim_update_date = silver_cptec_weather.select(F.col('atualizado_em').alias('data')).distinct()
 
+dim_update_date = dim_update_date.withColumn(
+    "id_update_date",
+    F.sha2(F.col("data").cast("string"), 256)
+)
+dim_update_date.printSchema()
+
+###########################
+# FORECAST DATE DIMENSION #
+###########################
+print('📃 "dim_forecast_date" table schema:')
+dim_forecast_date = silver_cptec_weather.select('data').distinct()
+
+dim_forecast_date = dim_forecast_date.withColumn(
+    "id_forecast_date",
+    F.sha2(F.col("data").cast("string"), 256)
+)
+dim_forecast_date.printSchema()
+
+###############################
+# WEATHER CONDITION DIMENSION #
+###############################
 print('📃 "dim_weather_condition" table schema:')
-dim_weather_condition = silver_cptec_weather.select(
-    F.monotonically_increasing_id().alias('id_condicao'),
-    'condicao',
-    'condicao_desc'
-).dropDuplicates(['condicao', 'condicao_desc'])
+dim_weather_condition = silver_cptec_weather.select('condicao', 'condicao_desc').distinct()
 
+dim_weather_condition = dim_weather_condition.withColumn(
+    "id_weather_condition",
+    F.sha2(F.col("condicao"), 256)
+)
 dim_weather_condition.printSchema()
 
-
-print('📃 "dim_date" table schema:')
-dim_date = silver_cptec_weather.select(
-    F.to_date('data', 'yyyy-MM-dd').alias('date')
-).dropDuplicates().withColumn('date_id', F.monotonically_increasing_id())
-
-dim_date = dim_date.withColumn('ano', F.year('date')) \
-                    .withColumn('mes', F.month('date')) \
-                    .withColumn('dia', F.dayofmonth('date')) \
-                    .withColumn('dia_semana', F.date_format('date', 'E'))
-
-dim_date.printSchema()
-
-
-print('📃 "dim_uf" table schema:')
-dim_uf_from_ibge = silver_ibge_cities.select(
-    F.col('microrregiao_mesorregiao_UF_id').alias('uf_ibge_id'),
-    F.col('microrregiao_mesorregiao_UF_sigla').alias('uf_sigla'),
-    F.col('microrregiao_mesorregiao_UF_nome').alias('uf_nome')
-).dropDuplicates(['uf_ibge_id', 'uf_sigla', 'uf_nome'])
-
-dim_uf = dim_uf_from_ibge.select(
-    F.col('uf_ibge_id').cast('long'),
-    F.trim(F.col('uf_sigla')).alias('uf_sigla'),
-    F.trim(F.col('uf_nome')).alias('uf_nome')
-).dropDuplicates(['uf_ibge_id']) \
-.withColumnRenamed('uf_ibge_id', 'id_uf')
-
-dim_uf.printSchema()
-
-
+################
+# WEATHER FACT #
+################
 print('📃 "fact_weather" table schema:')
 fact_weather = silver_cptec_weather.alias('w') \
-    .join(dim_city.alias('c'), F.col('w.cidade') == F.col('c.nome'), 'left') \
-    .join(dim_weather_condition.alias('cond'), F.col('w.condicao') == F.col('cond.condicao'), 'left') \
-    .join(dim_date.alias('d'), F.to_date('w.data', 'yyyy-MM-dd') == F.col('d.date'), 'left') \
-    .join(dim_uf.alias('u'), F.col('w.estado') == F.col('u.uf_sigla'), 'left') \
+    .join(dim_city.alias('c'), F.col('w.cidade') == F.col('c.nome'), 'inner') \
     .select(
-        F.monotonically_increasing_id().alias('id_fato'),
-        F.col('d.date_id'),
-        F.col('c.id_cptec').alias('id_cidade'),
-        F.col('u.id_uf'),
-        F.col('cond.id_condicao'),
         F.col('w.min').alias('temperatura_min'),
         F.col('w.max').alias('temperatura_max'),
-        F.col('w.atualizado_em'),
+        'w.data',
+        'w.atualizado_em',
+        'w.condicao',
         'w._source',
         'w._ingestion_date',
-        'w._processing_date'
+        'w._processing_date',
+        'c.id_city'
     )
 
-fact_weather.printSchema()
+fact_weather = fact_weather.withColumn(
+    "id_update_date",
+    F.sha2(F.col("atualizado_em").cast("string"), 256)
+).withColumn(
+    "id_forecast_date",
+    F.sha2(F.col("data").cast("string"), 256)
+).withColumn(
+    "id_weather_condition",
+    F.sha2(F.col("condicao"), 256)
+).withColumn(
+    '_modeling_date',
+    F.lit(today_str)
+).withColumn(
+    "id_fact",
+    F.sha2(
+        F.concat_ws(
+            "_",
+            F.col("id_city"),
+            F.col("id_forecast_date"),
+            F.col("id_weather_condition")
+        ),
+        256
+    )
+)
 
+fact_weather = fact_weather.select(
+    'id_city',
+    'id_update_date',
+    'id_forecast_date',
+    'id_weather_condition',
+    'temperatura_min',
+    'temperatura_max',
+    '_source',
+    '_ingestion_date',
+    '_processing_date',
+    '_modeling_date',
+    'id_fact'
+)
+fact_weather.printSchema()
 # %%
 print('Writing denormalized tables to BigQuery:')
 
@@ -185,17 +210,17 @@ write_bq_table(
 )
 
 write_bq_table(
-    df=dim_date,
+    df=dim_update_date,
     project_id=project_id,
     dataset_name=dataset_name,
-    table_name='dim_date'
+    table_name='dim_update_date'
 )
 
 write_bq_table(
-    df=dim_uf,
+    df=dim_forecast_date,
     project_id=project_id,
     dataset_name=dataset_name,
-    table_name='dim_uf'
+    table_name='dim_forecast_date'
 )
 
 write_bq_table(
@@ -211,3 +236,4 @@ write_bq_table(
     dataset_name=dataset_name,
     table_name='fact_weather'
 )
+# %%

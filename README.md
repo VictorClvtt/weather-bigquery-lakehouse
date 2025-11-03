@@ -22,6 +22,103 @@ O script faz isso utilizando principalmente o framework PySpark que possibilita 
 ### 3. [silver_to_gold.py](src/etl/silver_to_gold.py): Script de modelagem de dados.
 O terceiro script é responsável por criar um modelo dimensional de banco de dados com os dados vindos da camada Silver e gravar os dados na camada Gold do data warehouse no BigQuery.
 
+🥈 Schemas das tabelas da camada Silver:
+```
+📃 "silver_ibge_cities" table schema:
+root
+ |-- id: integer (nullable = true)
+ |-- nome: string (nullable = true)
+ |-- microrregiao_id: integer (nullable = true)
+ |-- microrregiao_nome: string (nullable = true)
+ |-- microrregiao_mesorregiao_id: integer (nullable = true)
+ |-- microrregiao_mesorregiao_nome: string (nullable = true)
+ |-- microrregiao_mesorregiao_UF_id: integer (nullable = true)
+ |-- microrregiao_mesorregiao_UF_sigla: string (nullable = true)
+ |-- microrregiao_mesorregiao_UF_nome: string (nullable = true)
+ |-- microrregiao_mesorregiao_UF_regiao_id: integer (nullable = true)
+ |-- microrregiao_mesorregiao_UF_regiao_sigla: string (nullable = true)
+ |-- microrregiao_mesorregiao_UF_regiao_nome: string (nullable = true)
+ |-- regiao_imediata_id: integer (nullable = true)
+ |-- regiao_imediata_nome: string (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_id: integer (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_nome: string (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_id: integer (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_sigla: string (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_nome: string (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_regiao_id: integer (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_regiao_sigla: string (nullable = true)
+ |-- regiao_imediata_regiao_intermediaria_UF_regiao_nome: string (nullable = true)
+ |-- _source: string (nullable = true)
+ |-- _ingestion_date: date (nullable = true)
+ |-- _processing_date: date (nullable = true)
+
+📃 "silver_cptec_cities" table schema:
+root
+ |-- nome: string (nullable = true)
+ |-- id: integer (nullable = true)
+ |-- estado: string (nullable = true)
+ |-- _source: string (nullable = true)
+ |-- _ingestion_date: date (nullable = true)
+ |-- _processing_date: date (nullable = true)
+
+📃 "silver_cptec_weather" table schema:
+root
+ |-- cidade: string (nullable = true)
+ |-- estado: string (nullable = true)
+ |-- atualizado_em: date (nullable = true)
+ |-- data: date (nullable = true)
+ |-- condicao: string (nullable = true)
+ |-- condicao_desc: string (nullable = true)
+ |-- min: integer (nullable = true)
+ |-- max: integer (nullable = true)
+ |-- _source: string (nullable = true)
+ |-- _ingestion_date: date (nullable = true)
+ |-- _processing_date: date (nullable = true)
+```
+
+🥇 Schemas das tabelas remodeladas da camada Gold:
+```
+📃 "dim_city" table schema:
+root
+ |-- id_ibge: integer (nullable = true)
+ |-- id_cptec: integer (nullable = true)
+ |-- nome: string (nullable = true)
+ |-- nome_regiao: string (nullable = true)
+ |-- uf_sigla: string (nullable = true)
+ |-- uf_nome: string (nullable = true)
+ |-- id_city: string (nullable = true)
+
+📃 "dim_update_date" table schema:
+root
+ |-- data: date (nullable = true)
+ |-- id_update_date: string (nullable = true)
+
+📃 "dim_forecast_date" table schema:
+root
+ |-- data: date (nullable = true)
+ |-- id_forecast_date: string (nullable = true)
+
+📃 "dim_weather_condition" table schema:
+root
+ |-- condicao: string (nullable = true)
+ |-- condicao_desc: string (nullable = true)
+ |-- id_weather_condition: string (nullable = true)
+
+📃 "fact_weather" table schema:
+root
+ |-- id_city: string (nullable = true)
+ |-- id_update_date: string (nullable = true)
+ |-- id_forecast_date: string (nullable = true)
+ |-- id_weather_condition: string (nullable = true)
+ |-- temperatura_min: integer (nullable = true)
+ |-- temperatura_max: integer (nullable = true)
+ |-- _source: string (nullable = true)
+ |-- _ingestion_date: date (nullable = true)
+ |-- _processing_date: date (nullable = true)
+ |-- _modeling_date: string (nullable = false)
+ |-- id_fact: string (nullable = true)
+```
+
 O script faz isso também utilizando principalmente o framework PySpark para ler os dados e criar um modelo dimensional Star Schema com os dados da camada Silver para permitir que esses dados sejam consumidos de forma mais fácil e eficiente para fins analíticos.
 
 ### 4. [Airflow](airflow/): Automação e agendamento da pipeline.
